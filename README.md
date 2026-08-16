@@ -2,7 +2,7 @@
 
 A native Linux configuration utility for the wired ROCCAT Kone Pro
 (`1e7d:2c88`). It includes a dark Adwaita GUI and a command-line helper for the
-mouse's onboard profiles.
+mouse's onboard profiles. This was only tested on my machine and thus it is possible it won't work on your device.
 
 ## Features
 
@@ -17,7 +17,7 @@ mouse's onboard profiles.
 
 Button remapping, Easy-Shift, macros, lift-off distance, angle snapping, surface
 calibration, and automatic application profile switching are visible but
-locked. Their Kone Pro USB reports are not publicly documented, and writing
+locked. (Roccat's) Kone Pro USB reports are not publicly documented, and writing
 guessed bytes could corrupt onboard profiles.
 
 ## Requirements
