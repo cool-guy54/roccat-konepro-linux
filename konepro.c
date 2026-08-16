@@ -1,9 +1,13 @@
+#define _POSIX_C_SOURCE 199309L
+
 #include<stdlib.h>
 #include<stdint.h>
 #include<stdio.h>
 #include<string.h>
 #include<libusb-1.0/libusb.h>
 #include<math.h>
+#include<time.h>
+#include<errno.h>
 
 struct profile{
     uint8_t profile1[69];
@@ -19,13 +23,27 @@ int setDefaultState(libusb_device_handle *handle);
 libusb_device_handle* openDevice(void);
 int closeDevice(libusb_device_handle* handle);
 int getProfileData(libusb_device_handle *handle, int profile, uint8_t *data);
+int writeProfileData(libusb_device_handle *handle, uint8_t *data);
 uint8_t getDebounceTime(libusb_device_handle *handle);
 void listProfileSettings(struct profile *p, int profile);
 int setDebounceTime(libusb_device_handle *handle, uint8_t dbT);
+int parseIntArg(const char *text, int minimum, int maximum, int *value);
 
 const uint16_t VID = 0x1e7d;
 const uint16_t PID = 0x2c88;
 int errCheck = 0;
+
+int parseIntArg(const char *text, int minimum, int maximum, int *value)
+{
+    char *end = NULL;
+    errno = 0;
+    long parsed = strtol(text, &end, 10);
+    if(errno != 0 || text[0] == '\0' || end == NULL || *end != '\0' ||
+       parsed < minimum || parsed > maximum)
+        return 1;
+    *value = (int)parsed;
+    return 0;
+}
 
 
 int main(int argc, char *argv[])
@@ -37,7 +55,9 @@ int main(int argc, char *argv[])
         printf("-lm value // LED Mode (0=Off,1=Fully lit,2=blinking,3=breathing,4=Heartbeat,9=Aimo Intelligent,10=Wave)\n-lb value // LED Brightness (0 to 255)\n");
         printf("-ls value // LED Speed (1 to 11)\n");
         printf("-list profile // List Profile Settings (0 to 4)\n");
+        printf("-list-all // List all five onboard profiles\n");
         printf("-p value // Polling Rate (0 to 3; 125,250,500,1000)\n");
+        printf("-p-all value // Set Polling Rate on all five profiles\n");
         printf("-d dpi switch // DPI (minimum: 50, maximum 19,000, increments of 50), switch(0 to 4)(Defaults to 0 if not spcified)\n-ds value // DPI Switcher (0 to 4)\n");
         printf("-prf value // Profile to change (value 0 to 4) Defaults to 0 if omitted\n");
         printf("-default // Factory reset Device\n");
@@ -49,7 +69,11 @@ int main(int argc, char *argv[])
     for(int i = 0; argv[i] != NULL; i++)
     {
         if(!strcmp(argv[i],"-prf") && i+1 < argc){
-            checkProfile = (int)strtol(argv[i+1],NULL,10);
+            if(parseIntArg(argv[i+1], 0, 4, &checkProfile) != 0)
+            {
+                printf("Invalid profile (expected 0 to 4)\n");
+                return 1;
+            }
             break;
         }
     }
@@ -95,6 +119,7 @@ int main(int argc, char *argv[])
     }
     
     uint8_t *currentSettings;
+    int allPollingRate = -1;
     switch(checkProfile)
     {
         case 0:
@@ -124,28 +149,61 @@ int main(int argc, char *argv[])
     {
         if(!strcmp(argv[i],"-l") && i+3 < argc)
         {
-            
-            currentSettings[38] = (uint8_t)strtol(argv[i+1], NULL, 10); // left click RGB
-            currentSettings[39] = (uint8_t)strtol(argv[i+2], NULL, 10);
-            currentSettings[40] = (uint8_t)strtol(argv[i+3], NULL, 10);
+            int red, green, blue;
+            if(parseIntArg(argv[i+1], 0, 255, &red) != 0 ||
+               parseIntArg(argv[i+2], 0, 255, &green) != 0 ||
+               parseIntArg(argv[i+3], 0, 255, &blue) != 0)
+            {
+                printf("Invalid left RGB value (expected 0 to 255)\n");
+                goto FailState;
+            }
+            currentSettings[38] = (uint8_t)red; // left click RGB
+            currentSettings[39] = (uint8_t)green;
+            currentSettings[40] = (uint8_t)blue;
                
         }
         else if(!strcmp(argv[i],"-r") && i+3 < argc)
         {
-            
-            currentSettings[43] = (uint8_t)strtol(argv[i+1], NULL, 10); // right click RGB
-            currentSettings[44] = (uint8_t)strtol(argv[i+2], NULL, 10);
-            currentSettings[45] = (uint8_t)strtol(argv[i+3], NULL, 10);
+            int red, green, blue;
+            if(parseIntArg(argv[i+1], 0, 255, &red) != 0 ||
+               parseIntArg(argv[i+2], 0, 255, &green) != 0 ||
+               parseIntArg(argv[i+3], 0, 255, &blue) != 0)
+            {
+                printf("Invalid right RGB value (expected 0 to 255)\n");
+                goto FailState;
+            }
+            currentSettings[43] = (uint8_t)red; // right click RGB
+            currentSettings[44] = (uint8_t)green;
+            currentSettings[45] = (uint8_t)blue;
             
         }
         else if(!strcmp(argv[i],"-p") && i+1 < argc)
         {
-            currentSettings[29] = (uint8_t)strtol(argv[i+1], NULL, 10); //Polling rate
-            if(currentSettings[29] > 3) goto FailState;
+            int pollingRate;
+            if(parseIntArg(argv[i+1], 0, 3, &pollingRate) != 0)
+            {
+                printf("Invalid polling rate (expected 0 to 3)\n");
+                goto FailState;
+            }
+            currentSettings[29] = (uint8_t)pollingRate;
+        }
+        else if(!strcmp(argv[i],"-p-all") && i+1 < argc)
+        {
+            if(parseIntArg(argv[i+1], 0, 3, &allPollingRate) != 0)
+            {
+                printf("Invalid polling rate (expected 0 to 3)\n");
+                goto FailState;
+            }
         }
         else if(!strcmp(argv[i], "-lm") && i+1 < argc)
         {
-            currentSettings[30] = (uint8_t)strtol(argv[i+1], NULL, 10); //LED Mode
+            int ledMode;
+            if(parseIntArg(argv[i+1], 0, 10, &ledMode) != 0)
+            {
+                printf("Invalid LED mode\n");
+                goto FailState;
+            }
+            currentSettings[30] = (uint8_t)ledMode;
             uint8_t validSettings[] = {0,1,2,3,4,9,10};
             for(int i = 0; i < 7; i++){
                 if(currentSettings[30] == validSettings[i]) goto FoundValidSetting;
@@ -157,31 +215,46 @@ int main(int argc, char *argv[])
         }
         else if(!strcmp(argv[i], "-lb") && i+1 < argc)
         {
-            currentSettings[32] = (uint8_t)strtol(argv[i+1], NULL, 10); //LED Brightness
+            int brightness;
+            if(parseIntArg(argv[i+1], 0, 255, &brightness) != 0)
+            {
+                printf("Invalid LED brightness (expected 0 to 255)\n");
+                goto FailState;
+            }
+            currentSettings[32] = (uint8_t)brightness;
         }
         else if(!strcmp(argv[i], "-d") && i+1 < argc)
         {
 
-			int switchMod = 0;
-			if(argc > i+2 && argv[i+2][0] <= '4' && argv[i+2][0] >= '0'){ // Decide which switch to change
-				unsigned int swtch = (unsigned int)strtol(argv[i+2], NULL, 10);
-				if(swtch > 4){
-					printf("Invalid DPI switch!\n");
-					closeDevice(devHandle);
-					return 0;
-				}
-				switchMod = 2 * swtch; 
-			}
-            unsigned int dpi = (unsigned int)strtol(argv[i+1], NULL, 10); 
-            if(dpi % 50 != 0 || dpi > 19000) goto FailState;
+            int dpi;
+            int swtch = 0;
+            if(parseIntArg(argv[i+1], 50, 19000, &dpi) != 0 || dpi % 50 != 0)
+            {
+                printf("Invalid DPI (expected 50 to 19000 in steps of 50)\n");
+                goto FailState;
+            }
+            if(argc > i+2 && argv[i+2][0] != '-')
+            {
+                if(parseIntArg(argv[i+2], 0, 4, &swtch) != 0)
+                {
+                    printf("Invalid DPI switch (expected 0 to 4)\n");
+                    goto FailState;
+                }
+            }
+            int switchMod = 2 * swtch;
             currentSettings[7+switchMod] = ((dpi/50) % 256);                 // Switch 1 to 4 is +2 elements from the first byte of the previous Switch
             currentSettings[8+switchMod] = (((dpi/50)-currentSettings[7+switchMod]) / 256);
             
         }
         else if(!strcmp(argv[i], "-ds") && i+1 < argc)
         {
-            currentSettings[6] = (uint8_t)strtol(argv[i+1], NULL,10); // DPI Switcher
-            if(currentSettings[6] > 4) goto FailState;
+            int dpiSwitch;
+            if(parseIntArg(argv[i+1], 0, 4, &dpiSwitch) != 0)
+            {
+                printf("Invalid active DPI switch (expected 0 to 4)\n");
+                goto FailState;
+            }
+            currentSettings[6] = (uint8_t)dpiSwitch;
         }
         else if(!strcmp(argv[i], "-default"))
         {
@@ -197,18 +270,42 @@ int main(int argc, char *argv[])
         }
         else if(!strcmp(argv[i], "-list") && i+1 < argc)
         {
-            listProfileSettings(&profiles, (int)strtol(argv[i+1],NULL,10)); // List Profile settings
+            int profileToList;
+            if(parseIntArg(argv[i+1], 0, 4, &profileToList) != 0)
+            {
+                printf("Invalid profile (expected 0 to 4)\n");
+                goto FailState;
+            }
+            listProfileSettings(&profiles, profileToList);
+            closeDevice(devHandle);
+            return 0;
+        }
+        else if(!strcmp(argv[i], "-list-all"))
+        {
+            for(int profile = 0; profile < 5; profile++)
+                listProfileSettings(&profiles, profile);
             closeDevice(devHandle);
             return 0;
         }
         else if (!strcmp(argv[i],"-ls") && i+1 < argc)
         {
-            currentSettings[31] = (uint8_t)strtol(argv[i+1],NULL, 10); // LED Speed
-            if(currentSettings[31] > 11 || currentSettings[31] == 0) goto FailState;
+            int speed;
+            if(parseIntArg(argv[i+1], 1, 11, &speed) != 0)
+            {
+                printf("Invalid LED speed (expected 1 to 11)\n");
+                goto FailState;
+            }
+            currentSettings[31] = (uint8_t)speed;
         }
         else if(!strcmp(argv[i],"-dbt") && i+1 < argc)
         {
-            errCheck = setDebounceTime(devHandle,(uint8_t)strtol(argv[i+1],NULL,10));
+            int debounce;
+            if(parseIntArg(argv[i+1], 0, 10, &debounce) != 0)
+            {
+                printf("Invalid debounce time (expected 0 to 10)\n");
+                goto FailState;
+            }
+            errCheck = setDebounceTime(devHandle,(uint8_t)debounce);
             if(errCheck != 0){
                 printf("setDebounceTime Failed\n");
                 closeDevice(devHandle);
@@ -220,15 +317,29 @@ int main(int argc, char *argv[])
         }
         
     }
-    int sum = 0;
-    for(int i = 0; i < 67; i++)
-        sum += currentSettings[i];
-    currentSettings[67] = sum % 256; // Checksum
-    currentSettings[68] = (sum - currentSettings[67]) / 256;
-    
-    int errorCheck = libusb_control_transfer(devHandle,0x21,0x09,0x0306,0x0003,currentSettings,0x0045,10000);
-    if(errorCheck < 0 ){
-        printf("Control transfer failed\n");
+    if(allPollingRate >= 0)
+    {
+        uint8_t *allProfiles[] = {
+            profiles.profile1,
+            profiles.profile2,
+            profiles.profile3,
+            profiles.profile4,
+            profiles.profile5,
+        };
+        for(int profile = 0; profile < 5; profile++)
+        {
+            allProfiles[profile][29] = (uint8_t)allPollingRate;
+            if(writeProfileData(devHandle, allProfiles[profile]) != 0)
+            {
+                printf("Failed to write profile %d\n", profile);
+                goto FailState;
+            }
+        }
+        printf("Polling rate set to %dHz on all profiles\n", 125 * (1 << allPollingRate));
+    }
+    else if(writeProfileData(devHandle, currentSettings) != 0)
+    {
+        printf("Failed to write profile %d\n", checkProfile);
         goto FailState;
     }
     
@@ -318,11 +429,14 @@ libusb_device_handle* openDevice(void)
         return NULL;
     }
 
-    errCheck = libusb_detach_kernel_driver(devHandle,3);
-    if(errCheck != 0)
+    /* Let libusb detach interface 3 only when necessary and reattach it when
+     * released. The old code incorrectly failed when no driver was attached. */
+    errCheck = libusb_set_auto_detach_kernel_driver(devHandle, 1);
+    if(errCheck != 0 && errCheck != LIBUSB_ERROR_NOT_SUPPORTED)
     {
-        libusb_attach_kernel_driver(devHandle,3);
-        printf("%s (detach kernel)\n",libusb_error_name(errCheck));
+        printf("%s (auto detach kernel driver)\n", libusb_error_name(errCheck));
+        libusb_close(devHandle);
+        libusb_exit(NULL);
         return NULL;
     }
     
@@ -330,8 +444,8 @@ libusb_device_handle* openDevice(void)
     if(errCheck != 0)
     {
         printf("%s (claim interface)\n", libusb_error_name(errCheck));
-        errCheck = libusb_attach_kernel_driver(devHandle,3);
-        if(errCheck != 0) printf("reattach kernel driver failed, reboot to fix");
+        libusb_close(devHandle);
+        libusb_exit(NULL);
         return NULL;
     }
     return devHandle;
@@ -346,13 +460,6 @@ int closeDevice(libusb_device_handle* handle)
         //return 1;
     }
     
-    errCheck = libusb_attach_kernel_driver(handle,3);
-    if(errCheck != 0)
-    {
-        printf("%s\n (attach kernel)",libusb_error_name(errCheck));
-        //return 1;
-    }
-
     libusb_close(handle);
 
     libusb_exit(NULL);
@@ -389,6 +496,11 @@ int getProfileData(libusb_device_handle *handle, int profile, uint8_t *data)
         printf("Control transfer Failed\n");
         return 1;
     }
+
+    /* Firmware 1.18 does not update report 6 synchronously. Reading it
+     * immediately can return a partially updated or previous profile. */
+    const struct timespec profileSwitchDelay = { .tv_sec = 0, .tv_nsec = 75000000 };
+    nanosleep(&profileSwitchDelay, NULL);
     /*
     Setup Data
     bmRequestType: 0xa1
@@ -401,13 +513,46 @@ int getProfileData(libusb_device_handle *handle, int profile, uint8_t *data)
     */
     
     errorCheck = libusb_control_transfer(handle,0xa1,0x01,0x0306,0x0003,data,0x0045,1000); //RETRIEVE PROFILE DATA
-    if(errorCheck < 0){
-        printf("Control transfer Failed\n");
+    if(errorCheck != 0x0045){
+        printf("Profile %d read failed: %s (%d bytes)\n", profile,
+               errorCheck < 0 ? libusb_error_name(errorCheck) : "short read",
+               errorCheck);
+        return 1;
+    }
+
+    int checksum = 0;
+    for(int i = 0; i < 67; i++)
+        checksum += data[i];
+    if(data[0] != 0x06 || data[67] != checksum % 256 ||
+       data[68] != (checksum - data[67]) / 256 || data[29] > 3)
+    {
+        printf("Profile %d returned invalid data; refusing to write it back\n", profile);
         return 1;
     }
     free(profileData);
     return 0;
 
+}
+
+int writeProfileData(libusb_device_handle *handle, uint8_t *data)
+{
+    int sum = 0;
+    for(int i = 0; i < 67; i++)
+        sum += data[i];
+    data[67] = sum % 256;
+    data[68] = (sum - data[67]) / 256;
+
+    int result = libusb_control_transfer(handle, 0x21, 0x09, 0x0306,
+                                         0x0003, data, 0x0045, 10000);
+    if(result != 0x0045)
+    {
+        printf("Control transfer failed: %s (%d bytes)\n",
+               result < 0 ? libusb_error_name(result) : "short write", result);
+        return 1;
+    }
+    const struct timespec profileWriteDelay = { .tv_sec = 0, .tv_nsec = 75000000 };
+    nanosleep(&profileWriteDelay, NULL);
+    return 0;
 }
 
 void listProfileSettings(struct profile *p, int profile)
