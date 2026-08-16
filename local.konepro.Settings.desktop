@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Kone Pro Settings
+GenericName=Mouse Settings
+Comment=Configure ROCCAT Kone Pro DPI, polling, lighting, and debounce
+Exec=konepro-gui
+TryExec=konepro-gui
+Icon=input-mouse
+Terminal=false
+Categories=Settings;HardwareSettings;
+Keywords=ROCCAT;Kone;mouse;DPI;polling;RGB;lighting;debounce;
+StartupNotify=true
+StartupWMClass=local.konepro.Settings

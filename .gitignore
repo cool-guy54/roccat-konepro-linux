@@ -1,0 +1,7 @@
+/konepro
+/__pycache__/
+*.py[cod]
+*.o
+*.so
+*.swp
+*~

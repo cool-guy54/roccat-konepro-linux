@@ -1,0 +1,3 @@
+#!/bin/sh
+script_path=$(readlink -f "$0") || exit 1
+exec python3 "$(dirname "$script_path")/konepro-gui.py" "$@"

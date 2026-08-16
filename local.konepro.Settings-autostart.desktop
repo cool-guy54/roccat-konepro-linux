@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Kone Pro Desktop Settings
+Comment=Restore Kone Pro pointer and scrolling settings for Hyprland
+Exec=konepro-gui --apply-system
+TryExec=konepro-gui
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
